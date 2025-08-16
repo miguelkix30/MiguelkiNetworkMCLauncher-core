@@ -1,5 +1,5 @@
 {
-  "name": "MiguelkiNetworkMCLauncher-core",
+  "name": "miguelkinetworkmclauncher-core",
   "version": "1.0.0",
   "description": "Fork modificado de MinecraftLauncher-core para Miguelki Network",
   "main": "index.js",
