@@ -118,7 +118,7 @@ launcher.on('progress', (progress) => {
 
 ### `download-status`
 
-**Descripción**: Emite información sobre el estado de descarga de archivos individuales.
+**Descripción**: Emite información detallada sobre el estado de descarga de archivos individuales, incluyendo el progreso total de la fase actual.
 
 **Cuándo se emite**: Durante la descarga de cada archivo.
 
@@ -127,9 +127,15 @@ launcher.on('progress', (progress) => {
 {
   name: string,        // Nombre del archivo
   type: string,        // Tipo de descarga
-  current: number,     // Bytes descargados
-  total: number,       // Tamaño total del archivo
-  percentage: number   // Porcentaje de descarga (0-100)
+  current: number,     // Bytes descargados del archivo actual
+  total: number,       // Tamaño total del archivo actual
+  percentage: number,  // Porcentaje de descarga del archivo actual (0-100)
+  phaseProgress: {     // Información del progreso total de la fase (siempre presente)
+    current: number,   // Archivos completados en la fase
+    total: number,     // Total de archivos en la fase
+    percentage: number,// Porcentaje total de la fase (0-100)
+    message: string    // Mensaje descriptivo de la fase
+  }
 }
 ```
 
@@ -137,6 +143,10 @@ launcher.on('progress', (progress) => {
 ```javascript
 launcher.on('download-status', (status) => {
   console.log(`Descargando ${status.name}: ${status.percentage}% (${status.current}/${status.total} bytes)`);
+  
+  // phaseProgress siempre está disponible
+  console.log(`Progreso de la fase: ${status.phaseProgress.message} - ${status.phaseProgress.percentage}%`);
+  console.log(`Archivos completados: ${status.phaseProgress.current}/${status.phaseProgress.total}`);
 });
 ```
 
@@ -150,7 +160,13 @@ launcher.on('download-status', (status) => {
   url: string,         // URL de descarga
   file: string,        // Nombre del archivo
   type: string,        // Tipo de descarga
-  totalBytes: number   // Tamaño total del archivo
+  totalBytes: number,  // Tamaño total del archivo
+  phaseProgress: {     // Información del progreso total de la fase (siempre presente)
+    current: number,   // Archivos completados en la fase
+    total: number,     // Total de archivos en la fase
+    percentage: number,// Porcentaje total de la fase (0-100)
+    message: string    // Mensaje descriptivo de la fase
+  }
 }
 ```
 
@@ -163,7 +179,13 @@ launcher.on('download-status', (status) => {
 {
   file: string,        // Nombre del archivo
   type: string,        // Tipo de descarga
-  url: string          // URL de descarga
+  url: string,         // URL de descarga
+  phaseProgress: {     // Información del progreso total de la fase (siempre presente)
+    current: number,   // Archivos completados en la fase
+    total: number,     // Total de archivos en la fase
+    percentage: number,// Porcentaje total de la fase (0-100)
+    message: string    // Mensaje descriptivo de la fase
+  }
 }
 ```
 
@@ -184,7 +206,13 @@ launcher.on('download-status', (status) => {
   file: string,        // Nombre del archivo
   type: string,        // Tipo de descarga
   error: string,       // Mensaje de error
-  retry?: boolean      // Si se va a reintentar
+  retry?: boolean,     // Si se va a reintentar
+  phaseProgress: {     // Información del progreso total de la fase (siempre presente)
+    current: number,   // Archivos completados en la fase
+    total: number,     // Total de archivos en la fase
+    percentage: number,// Porcentaje total de la fase (0-100)
+    message: string    // Mensaje descriptivo de la fase
+  }
 }
 ```
 
@@ -194,6 +222,11 @@ launcher.on('download-error', (error) => {
   console.error(`Error descargando ${error.file}: ${error.error}`);
   if (error.retry) {
     console.log('Reintentando descarga...');
+  }
+  
+  // Mostrar progreso de la fase si está disponible
+  if (error.phaseProgress) {
+    console.log(`Progreso de la fase: ${error.phaseProgress.message} - ${error.phaseProgress.percentage}%`);
   }
 });
 ```
@@ -361,13 +394,23 @@ launcher.on('error', (error) => {
   showErrorDialog(error);
 });
 
-// Eventos de descarga
+// Eventos de descarga con progreso mejorado
 launcher.on('download-status', (status) => {
-  updateDownloadUI(status.name, status.percentage);
+  // Mostrar progreso del archivo individual
+  updateFileProgressUI(status.name, status.percentage);
+  
+  // Mostrar progreso total de la fase (siempre disponible)
+  updatePhaseProgressUI(
+    status.phaseProgress.message, 
+    status.phaseProgress.percentage,
+    status.phaseProgress.current,
+    status.phaseProgress.total
+  );
 });
 
 launcher.on('download-error', (error) => {
   console.error(`Error descargando ${error.file}: ${error.error}`);
+  console.log(`Progreso de fase actual: ${error.phaseProgress.message} - ${error.phaseProgress.percentage}%`);
 });
 
 // Eventos de Minecraft
@@ -420,3 +463,26 @@ launcher.launch(options);
 - Los campos `type` y `task` nunca son `undefined` en las nuevas versiones.
 - Los eventos de error incluyen información detallada para facilitar el diagnóstico.
 - Los eventos de progreso proporcionan información tanto numérica como textual.
+- **NUEVO**: Los eventos de descarga ahora incluyen `phaseProgress` que proporciona información sobre el progreso total de la fase actual de descarga, permitiendo barras de progreso más precisas.
+
+## Mejoras en Eventos de Descarga
+
+### Progreso Total de Fase
+
+Los eventos `download-status`, `download-start`, `download-complete` y `download-error` ahora incluyen siempre un campo `phaseProgress` que proporciona información sobre el progreso total de la fase actual:
+
+```javascript
+launcher.on('download-status', (status) => {
+  // Progreso del archivo individual
+  console.log(`Archivo: ${status.name} - ${status.percentage}%`);
+  
+  // Progreso total de la fase (siempre disponible)
+  const phasePercentage = status.phaseProgress.percentage;
+  console.log(`Fase total: ${status.phaseProgress.message} - ${phasePercentage}%`);
+  
+  // Actualizar barra de progreso principal con el progreso de la fase
+  updateMainProgressBar(phasePercentage, status.phaseProgress.message);
+});
+```
+
+Esta mejora permite a los desarrolladores crear interfaces de usuario más informativas que muestren tanto el progreso de archivos individuales como el progreso general de cada fase de descarga.

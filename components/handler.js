@@ -14,6 +14,45 @@ class Handler {
       pool: { maxSockets: this.options.overrides.maxSockets || 2 },
       timeout: this.options.timeout || 50000
     })
+    
+    // Variables para tracking de progreso de fase
+    this.currentPhase = {
+      type: '',
+      total: 0,
+      current: 0,
+      message: ''
+    }
+  }
+
+  setPhaseProgress(type, total, message) {
+    this.currentPhase = {
+      type: type,
+      total: total,
+      current: 0,
+      message: message
+    }
+  }
+
+  incrementPhaseProgress() {
+    this.currentPhase.current++
+  }
+
+  getPhaseProgress() {
+    if (this.currentPhase.total === 0) {
+      return {
+        current: 0,
+        total: 1,
+        percentage: 0,
+        message: 'Descargando archivo'
+      }
+    }
+    
+    return {
+      current: this.currentPhase.current,
+      total: this.currentPhase.total,
+      percentage: Math.round((this.currentPhase.current / this.currentPhase.total) * 100),
+      message: this.currentPhase.message || 'Descargando archivos'
+    }
   }
 
   checkJava (java) {
@@ -34,7 +73,7 @@ class Handler {
     })
   }
 
-  downloadAsync (url, directory, name, retry, type) {
+  downloadAsync (url, directory, name, retry, type, phaseProgress) {
     return new Promise(resolve => {
       fs.mkdirSync(directory, { recursive: true })
 
@@ -46,46 +85,118 @@ class Handler {
       _request.on('response', (data) => {
         if (data.statusCode === 404) {
           this.client.emit('debug', `[MCLC]: Error 404: Archivo no encontrado en ${url}`)
-          this.client.emit('download-error', {
+          const errorEvent = {
             url: url,
             file: name,
             type: type || 'unknown',
             error: 'File not found (404)'
-          })
+          }
+
+          // Siempre incluir phaseProgress con valores por defecto
+          if (phaseProgress) {
+            errorEvent.phaseProgress = {
+              current: phaseProgress.current || 0,
+              total: phaseProgress.total || 1,
+              percentage: phaseProgress.total > 0 ? Math.round((phaseProgress.current / phaseProgress.total) * 100) : 0,
+              message: phaseProgress.message || 'Descargando archivos'
+            }
+          } else {
+            errorEvent.phaseProgress = {
+              current: 0,
+              total: 1,
+              percentage: 0,
+              message: 'Error 404 en descarga'
+            }
+          }
+
+          this.client.emit('download-error', errorEvent)
           return resolve(false)
         }
 
         totalBytes = parseInt(data.headers['content-length']) || 0
-        this.client.emit('download-start', {
+        const startEvent = {
           url: url,
           file: name,
           type: type || 'unknown',
           totalBytes: totalBytes
-        })
+        }
+
+        // Siempre incluir phaseProgress con valores por defecto
+        if (phaseProgress) {
+          startEvent.phaseProgress = {
+            current: phaseProgress.current || 0,
+            total: phaseProgress.total || 1,
+            percentage: phaseProgress.total > 0 ? Math.round((phaseProgress.current / phaseProgress.total) * 100) : 0,
+            message: phaseProgress.message || 'Descargando archivos'
+          }
+        } else {
+          startEvent.phaseProgress = {
+            current: 0,
+            total: 1,
+            percentage: 0,
+            message: 'Descargando archivo'
+          }
+        }
+
+        this.client.emit('download-start', startEvent)
       })
 
       _request.on('error', async (error) => {
         this.client.emit('debug', `[MCLC]: Error descargando ${name}: ${error.message}. Reintentando: ${retry}`)
-        this.client.emit('download-error', {
+        const errorEvent = {
           url: url,
           file: name,
           type: type || 'unknown',
           error: error.message,
           retry: retry
-        })
-        if (retry) await this.downloadAsync(url, directory, name, false, type)
+        }
+
+        // Siempre incluir phaseProgress con valores por defecto
+        if (phaseProgress) {
+          errorEvent.phaseProgress = {
+            current: phaseProgress.current || 0,
+            total: phaseProgress.total || 1,
+            percentage: phaseProgress.total > 0 ? Math.round((phaseProgress.current / phaseProgress.total) * 100) : 0,
+            message: phaseProgress.message || 'Descargando archivos'
+          }
+        } else {
+          errorEvent.phaseProgress = {
+            current: 0,
+            total: 1,
+            percentage: 0,
+            message: 'Error en descarga'
+          }
+        }
+
+        this.client.emit('download-error', errorEvent)
+        if (retry) await this.downloadAsync(url, directory, name, false, type, phaseProgress)
         resolve()
       })
 
       _request.on('data', (data) => {
         receivedBytes += data.length
-        this.client.emit('download-status', {
+        const filePercentage = totalBytes > 0 ? Math.round((receivedBytes / totalBytes) * 100) : 0
+        const downloadStatus = {
           name: name,
           type: type || 'unknown',
           current: receivedBytes,
           total: totalBytes,
-          percentage: totalBytes > 0 ? Math.round((receivedBytes / totalBytes) * 100) : 0
-        })
+          percentage: filePercentage
+        }
+
+        // Usar el progreso de fase si se proporciona, de lo contrario usar el tracking interno
+        if (phaseProgress) {
+          downloadStatus.phaseProgress = {
+            current: phaseProgress.current || 0,
+            total: phaseProgress.total || 1,
+            percentage: phaseProgress.total > 0 ? Math.round((phaseProgress.current / phaseProgress.total) * 100) : 0,
+            message: phaseProgress.message || 'Descargando archivos'
+          }
+        } else {
+          downloadStatus.phaseProgress = this.getPhaseProgress()
+        }
+
+        this.client.emit('download-status', downloadStatus)
       })
 
       const file = fs.createWriteStream(path.join(directory, name))
@@ -93,11 +204,30 @@ class Handler {
 
       file.once('finish', () => {
         this.client.emit('download', name)
-        this.client.emit('download-complete', {
+        const completeEvent = {
           file: name,
           type: type || 'unknown',
           url: url
-        })
+        }
+
+        // Siempre incluir phaseProgress con valores por defecto
+        if (phaseProgress) {
+          completeEvent.phaseProgress = {
+            current: phaseProgress.current || 0,
+            total: phaseProgress.total || 1,
+            percentage: phaseProgress.total > 0 ? Math.round((phaseProgress.current / phaseProgress.total) * 100) : 0,
+            message: phaseProgress.message || 'Descargando archivos'
+          }
+        } else {
+          completeEvent.phaseProgress = {
+            current: 1,
+            total: 1,
+            percentage: 100,
+            message: 'Descarga completada'
+          }
+        }
+
+        this.client.emit('download-complete', completeEvent)
         resolve({
           failed: false,
           asset: null
@@ -106,15 +236,34 @@ class Handler {
 
       file.on('error', async (e) => {
         this.client.emit('debug', `[MCLC]: Error escribiendo archivo ${name}: ${e.message}. Reintentando: ${retry}`)
-        this.client.emit('download-error', {
+        const errorEvent = {
           url: url,
           file: name,
           type: type || 'unknown',
           error: e.message,
           retry: retry
-        })
+        }
+
+        // Siempre incluir phaseProgress con valores por defecto
+        if (phaseProgress) {
+          errorEvent.phaseProgress = {
+            current: phaseProgress.current || 0,
+            total: phaseProgress.total || 1,
+            percentage: phaseProgress.total > 0 ? Math.round((phaseProgress.current / phaseProgress.total) * 100) : 0,
+            message: phaseProgress.message || 'Descargando archivos'
+          }
+        } else {
+          errorEvent.phaseProgress = {
+            current: 0,
+            total: 1,
+            percentage: 0,
+            message: 'Error en descarga'
+          }
+        }
+
+        this.client.emit('download-error', errorEvent)
         if (fs.existsSync(path.join(directory, name))) fs.unlinkSync(path.join(directory, name))
-        if (retry) await this.downloadAsync(url, directory, name, false, type)
+        if (retry) await this.downloadAsync(url, directory, name, false, type, phaseProgress)
         resolve()
       })
     })
@@ -182,7 +331,12 @@ class Handler {
   }
 
   async getJar () {
-    await this.downloadAsync(this.version.downloads.client.url, this.options.directory, `${this.options.version.custom ? this.options.version.custom : this.options.version.number}.jar`, true, 'version-jar')
+    const phaseProgress = {
+      current: 0,
+      total: 1,
+      message: 'Descargando JAR de Minecraft'
+    }
+    await this.downloadAsync(this.version.downloads.client.url, this.options.directory, `${this.options.version.custom ? this.options.version.custom : this.options.version.number}.jar`, true, 'version-jar', phaseProgress)
     fs.writeFileSync(path.join(this.options.directory, `${this.options.version.number}.json`), JSON.stringify(this.version, null, 4))
     return this.client.emit('debug', '[MCLC]: Downloaded version jar and wrote version json')
   }
@@ -195,16 +349,25 @@ class Handler {
     
     if (!fs.existsSync(path.join(assetDirectory, 'indexes', `${assetId}.json`))) {
       this.client.emit('debug', '[MCLC]: Descargando índice de assets')
-      await this.downloadAsync(this.version.assetIndex.url, path.join(assetDirectory, 'indexes'), `${assetId}.json`, true, 'asset-json')
+      const indexPhaseProgress = {
+        current: 0,
+        total: 1,
+        message: 'Descargando índice de assets'
+      }
+      await this.downloadAsync(this.version.assetIndex.url, path.join(assetDirectory, 'indexes'), `${assetId}.json`, true, 'asset-json', indexPhaseProgress)
     }
 
     const index = JSON.parse(fs.readFileSync(path.join(assetDirectory, 'indexes', `${assetId}.json`), { encoding: 'utf8' }))
+    const totalAssets = Object.keys(index.objects).length
+
+    // Configurar el progreso de la fase
+    this.setPhaseProgress('assets', totalAssets, 'Descargando assets del juego')
 
     this.client.emit('progress', {
       type: 'assets',
       task: 'downloading',
       current: 0,
-      total: Object.keys(index.objects).length,
+      total: totalAssets,
       message: 'Descargando assets del juego'
     })
 
@@ -216,13 +379,15 @@ class Handler {
       if (!fs.existsSync(path.join(subAsset, hash)) || !await this.checkSum(hash, path.join(subAsset, hash))) {
         await this.downloadAsync(`${this.options.overrides.url.resource}/${subhash}/${hash}`, subAsset, hash, true, 'assets')
       }
+      
+      this.incrementPhaseProgress()
       counter++
       this.client.emit('progress', {
         type: 'assets',
         task: 'downloading',
         current: counter,
-        total: Object.keys(index.objects).length,
-        message: `Descargando assets: ${counter}/${Object.keys(index.objects).length}`
+        total: totalAssets,
+        message: `Descargando assets: ${counter}/${totalAssets}`
       })
     }))
     counter = 0
@@ -245,6 +410,9 @@ class Handler {
         message: 'Copiando assets a formato legacy'
       })
 
+      const totalLegacyAssets = Object.keys(index.objects).length
+      let completedLegacyAssets = 0
+
       await Promise.all(Object.keys(index.objects).map(async asset => {
         const hash = index.objects[asset].hash
         const subhash = hash.substring(0, 2)
@@ -260,6 +428,7 @@ class Handler {
         if (!fs.existsSync(path.join(legacyDirectory, asset))) {
           fs.copyFileSync(path.join(subAsset, hash), path.join(legacyDirectory, asset))
         }
+        completedLegacyAssets++
         counter++
         this.client.emit('progress', {
           type: 'assets-copy',
@@ -322,6 +491,9 @@ class Handler {
         message: 'Descargando librerías nativas'
       })
 
+      // Configurar el progreso de la fase
+      this.setPhaseProgress('natives', stat.length, 'Procesando librerías nativas')
+
       await Promise.all(stat.map(async (native) => {
         if (!native) return
         const name = native.path.split('/').pop()
@@ -338,6 +510,7 @@ class Handler {
           console.warn(e)
         }
         fs.unlinkSync(path.join(nativeDirectory, name))
+        this.incrementPhaseProgress()
         counter++
         this.client.emit('progress', {
           type: 'natives',
@@ -518,6 +691,10 @@ class Handler {
 
   async downloadToDirectory (directory, libraries, eventName) {
     const libs = []
+    const validLibraries = libraries.filter(library => library && !this.parseRule(library))
+    
+    // Configurar el progreso de la fase
+    this.setPhaseProgress(eventName, validLibraries.length, `Descargando librerías ${eventName}`)
 
     await Promise.all(libraries.map(async library => {
       if (!library) return
@@ -549,6 +726,7 @@ class Handler {
         if (!this.checkSum(library.downloads.artifact.sha1, path.join(jarPath, name))) await downloadLibrary(library)
       }
 
+      this.incrementPhaseProgress()
       counter++
       this.client.emit('progress', {
         type: eventName,
@@ -768,7 +946,12 @@ class Handler {
 
   async extractPackage (options = this.options) {
     if (options.clientPackage.startsWith('http')) {
-      await this.downloadAsync(options.clientPackage, options.root, 'clientPackage.zip', true, 'client-package')
+      const phaseProgress = {
+        current: 0,
+        total: 1,
+        message: 'Descargando paquete de cliente'
+      }
+      await this.downloadAsync(options.clientPackage, options.root, 'clientPackage.zip', true, 'client-package', phaseProgress)
       options.clientPackage = path.join(options.root, 'clientPackage.zip')
     }
     new Zip(options.clientPackage).extractAllTo(options.root, true)

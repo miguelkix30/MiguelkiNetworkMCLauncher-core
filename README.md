@@ -1,10 +1,6 @@
 ![logo](https://owo.whats-th.is/8mT5kxc.png)
-##### Project rewrite coming soon™
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-![version](https://img.shields.io/badge/stable_version-3.18.2-blue)
-
-MCLC (Minecraft Launcher Core) is a NodeJS solution for launching modded and vanilla Minecraft without having to download and format everything yourself.
-Basically a core for your Electron or script based launchers.
+# All credits go to Pierce and the original minecraft-launcher-core contributors.
+## This package was made for Miguelki Network MC Launcher and is a fork of the original minecraft-launcher-core. No support will be provided.
 
 ## New Features & Improvements
 
@@ -13,25 +9,40 @@ This fork includes enhanced event emissions with better error handling and progr
 - **Enhanced Error Handling**: Better error reporting with detailed error types and stack traces
 - **Minecraft Process Monitoring**: New events for monitoring Minecraft process lifecycle
 - **Download Progress**: Detailed download status and error reporting
+- **🆕 Enhanced Phase Progress Tracking**: Download events now include total phase progress for better UI integration
 - **Spanish Language Support**: Event messages in Spanish for better localization
+
+### Enhanced Download Progress
+
+The download events now include comprehensive progress information with **accurate phase counters**:
+- **Individual file progress**: Track progress of each file being downloaded
+- **Total phase progress**: Monitor overall progress of each download phase (assets, libraries, etc.)
+- **Accurate phase counters**: Fixed static counter issue - now properly increments (1/64 → 2/64 → 3/64)
+- **Parallel download support**: Works correctly with concurrent downloads using Promise.all
+- **Better UI integration**: Perfect for creating sophisticated progress bars and status displays
+
+```javascript
+launcher.on('download-status', (status) => {
+  // Individual file progress
+  console.log(`File: ${status.name} - ${status.percentage}%`);
+  
+  // Total phase progress (always available!)
+  console.log(`Phase: ${status.phaseProgress.message} - ${status.phaseProgress.percentage}%`);
+  console.log(`Progress: ${status.phaseProgress.current}/${status.phaseProgress.total}`);
+  updateMainProgressBar(status.phaseProgress.percentage);
+});
+```
+```
 
 📖 **[Complete Events Documentation](./EMITS_DOCUMENTATION.md)** - Detailed guide of all available events
 
-### Getting support
-I've created a Discord server for anyone who needs to get in contact with me or get help!
-<p>
-   <a href="https://discord.gg/8uYVbXP">
-   <img src="https://img.shields.io/discord/568550848871923723?logo=discord"
-      alt="chat on Discord"></a>
-<p>
-
 ### Installing
 
-`npm i minecraft-launcher-core`
+`npm i miguelkinetworkmclauncher-core`
 
 ### Standard Example
 ```javascript
-const { Client, Authenticator } = require('minecraft-launcher-core');
+const { Client, Authenticator } = require('miguelkinetworkmclauncher-core');
 const launcher = new Client();
 
 let opts = {

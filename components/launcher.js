@@ -163,12 +163,22 @@ class MCLCore extends EventEmitter {
           const configPath = path.resolve(this.options.overrides.cwd || this.options.root)
           const intVersion = parseInt(versionFile.id.split('.')[1])
           if (intVersion >= 12) {
+            const phaseProgress = {
+              current: 0,
+              total: 1,
+              message: 'Descargando configuración log4j'
+            }
             await this.handler.downloadAsync('https://launcher.mojang.com/v1/objects/02937d122c86ce73319ef9975b58896fc1b491d1/log4j2_112-116.xml',
-              configPath, 'log4j2_112-116.xml', true, 'log4j')
+              configPath, 'log4j2_112-116.xml', true, 'log4j', phaseProgress)
             jvm.push('-Dlog4j.configurationFile=log4j2_112-116.xml')
           } else if (intVersion >= 7) {
+            const phaseProgress = {
+              current: 0,
+              total: 1,
+              message: 'Descargando configuración log4j'
+            }
             await this.handler.downloadAsync('https://launcher.mojang.com/v1/objects/dd2b723346a8dcd48e7f4d245f6bf09e98db9696/log4j2_17-111.xml',
-              configPath, 'log4j2_17-111.xml', true, 'log4j')
+              configPath, 'log4j2_17-111.xml', true, 'log4j', phaseProgress)
             jvm.push('-Dlog4j.configurationFile=log4j2_17-111.xml')
           }
         }

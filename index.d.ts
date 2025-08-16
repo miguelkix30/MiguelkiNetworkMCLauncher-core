@@ -300,12 +300,20 @@ declare module "minecraft-launcher-core" {
     message: string;
   }
 
+  interface IPhaseProgress {
+    current: number;
+    total: number;
+    percentage: number;
+    message: string;
+  }
+
   interface IDownloadStatusEvent {
     name: string;
     type: string;
     current: number;
     total: number;
     percentage: number;
+    phaseProgress: IPhaseProgress;
   }
 
   interface IDownloadStartEvent {
@@ -313,12 +321,14 @@ declare module "minecraft-launcher-core" {
     file: string;
     type: string;
     totalBytes: number;
+    phaseProgress: IPhaseProgress;
   }
 
   interface IDownloadCompleteEvent {
     file: string;
     type: string;
     url: string;
+    phaseProgress: IPhaseProgress;
   }
 
   interface IDownloadErrorEvent {
@@ -327,6 +337,7 @@ declare module "minecraft-launcher-core" {
     type: string;
     error: string;
     retry?: boolean;
+    phaseProgress: IPhaseProgress;
   }
 
   interface IErrorEvent {
