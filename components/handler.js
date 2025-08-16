@@ -45,16 +45,34 @@ class Handler {
 
       _request.on('response', (data) => {
         if (data.statusCode === 404) {
-          this.client.emit('debug', `[MCLC]: Failed to download ${url} due to: File not found...`)
+          this.client.emit('debug', `[MCLC]: Error 404: Archivo no encontrado en ${url}`)
+          this.client.emit('download-error', {
+            url: url,
+            file: name,
+            type: type || 'unknown',
+            error: 'File not found (404)'
+          })
           return resolve(false)
         }
 
-        totalBytes = parseInt(data.headers['content-length'])
+        totalBytes = parseInt(data.headers['content-length']) || 0
+        this.client.emit('download-start', {
+          url: url,
+          file: name,
+          type: type || 'unknown',
+          totalBytes: totalBytes
+        })
       })
 
       _request.on('error', async (error) => {
-        this.client.emit('debug', `[MCLC]: Failed to download asset to ${path.join(directory, name)} due to\n${error}.` +
-                    ` Retrying... ${retry}`)
+        this.client.emit('debug', `[MCLC]: Error descargando ${name}: ${error.message}. Reintentando: ${retry}`)
+        this.client.emit('download-error', {
+          url: url,
+          file: name,
+          type: type || 'unknown',
+          error: error.message,
+          retry: retry
+        })
         if (retry) await this.downloadAsync(url, directory, name, false, type)
         resolve()
       })
@@ -63,9 +81,10 @@ class Handler {
         receivedBytes += data.length
         this.client.emit('download-status', {
           name: name,
-          type: type,
+          type: type || 'unknown',
           current: receivedBytes,
-          total: totalBytes
+          total: totalBytes,
+          percentage: totalBytes > 0 ? Math.round((receivedBytes / totalBytes) * 100) : 0
         })
       })
 
@@ -74,6 +93,11 @@ class Handler {
 
       file.once('finish', () => {
         this.client.emit('download', name)
+        this.client.emit('download-complete', {
+          file: name,
+          type: type || 'unknown',
+          url: url
+        })
         resolve({
           failed: false,
           asset: null
@@ -81,8 +105,14 @@ class Handler {
       })
 
       file.on('error', async (e) => {
-        this.client.emit('debug', `[MCLC]: Failed to download asset to ${path.join(directory, name)} due to\n${e}.` +
-                    ` Retrying... ${retry}`)
+        this.client.emit('debug', `[MCLC]: Error escribiendo archivo ${name}: ${e.message}. Reintentando: ${retry}`)
+        this.client.emit('download-error', {
+          url: url,
+          file: name,
+          type: type || 'unknown',
+          error: e.message,
+          retry: retry
+        })
         if (fs.existsSync(path.join(directory, name))) fs.unlinkSync(path.join(directory, name))
         if (retry) await this.downloadAsync(url, directory, name, false, type)
         resolve()
@@ -160,7 +190,11 @@ class Handler {
   async getAssets () {
     const assetDirectory = path.resolve(this.options.overrides.assetRoot || path.join(this.options.root, 'assets'))
     const assetId = this.options.version.custom || this.options.version.number
+    
+    this.client.emit('debug', `[MCLC]: Iniciando descarga de assets para ${assetId}`)
+    
     if (!fs.existsSync(path.join(assetDirectory, 'indexes', `${assetId}.json`))) {
+      this.client.emit('debug', '[MCLC]: Descargando índice de assets')
       await this.downloadAsync(this.version.assetIndex.url, path.join(assetDirectory, 'indexes'), `${assetId}.json`, true, 'asset-json')
     }
 
@@ -168,8 +202,10 @@ class Handler {
 
     this.client.emit('progress', {
       type: 'assets',
-      task: 0,
-      total: Object.keys(index.objects).length
+      task: 'downloading',
+      current: 0,
+      total: Object.keys(index.objects).length,
+      message: 'Descargando assets del juego'
     })
 
     await Promise.all(Object.keys(index.objects).map(async asset => {
@@ -183,8 +219,10 @@ class Handler {
       counter++
       this.client.emit('progress', {
         type: 'assets',
-        task: counter,
-        total: Object.keys(index.objects).length
+        task: 'downloading',
+        current: counter,
+        total: Object.keys(index.objects).length,
+        message: `Descargando assets: ${counter}/${Object.keys(index.objects).length}`
       })
     }))
     counter = 0
@@ -192,18 +230,19 @@ class Handler {
     // Copy assets to legacy if it's an older Minecraft version.
     if (this.isLegacy()) {
       if (fs.existsSync(path.join(assetDirectory, 'legacy'))) {
-        this.client.emit('debug', '[MCLC]: The \'legacy\' directory is no longer used as Minecraft looks ' +
-          'for the resouces folder regardless of what is passed in the assetDirecotry launch option. I\'d ' +
-          `recommend removing the directory (${path.join(assetDirectory, 'legacy')})`)
+        this.client.emit('debug', '[MCLC]: El directorio \'legacy\' ya no se usa, considera eliminarlo ' +
+          `(${path.join(assetDirectory, 'legacy')})`)
       }
 
       const legacyDirectory = path.join(this.options.root, 'resources')
-      this.client.emit('debug', `[MCLC]: Copying assets over to ${legacyDirectory}`)
+      this.client.emit('debug', `[MCLC]: Copiando assets a formato legacy en ${legacyDirectory}`)
 
       this.client.emit('progress', {
         type: 'assets-copy',
-        task: 0,
-        total: Object.keys(index.objects).length
+        task: 'copying',
+        current: 0,
+        total: Object.keys(index.objects).length,
+        message: 'Copiando assets a formato legacy'
       })
 
       await Promise.all(Object.keys(index.objects).map(async asset => {
@@ -224,14 +263,16 @@ class Handler {
         counter++
         this.client.emit('progress', {
           type: 'assets-copy',
-          task: counter,
-          total: Object.keys(index.objects).length
+          task: 'copying',
+          current: counter,
+          total: Object.keys(index.objects).length,
+          message: `Copiando assets legacy: ${counter}/${Object.keys(index.objects).length}`
         })
       }))
     }
     counter = 0
 
-    this.client.emit('debug', '[MCLC]: Downloaded assets')
+    this.client.emit('debug', '[MCLC]: Assets descargados correctamente')
   }
 
   parseRule (lib) {
@@ -275,8 +316,10 @@ class Handler {
 
       this.client.emit('progress', {
         type: 'natives',
-        task: 0,
-        total: stat.length
+        task: 'downloading',
+        current: 0,
+        total: stat.length,
+        message: 'Descargando librerías nativas'
       })
 
       await Promise.all(stat.map(async (native) => {
@@ -298,15 +341,17 @@ class Handler {
         counter++
         this.client.emit('progress', {
           type: 'natives',
-          task: counter,
-          total: stat.length
+          task: 'downloading',
+          current: counter,
+          total: stat.length,
+          message: `Procesando nativos: ${counter}/${stat.length}`
         })
       }))
-      this.client.emit('debug', '[MCLC]: Downloaded and extracted natives')
+      this.client.emit('debug', '[MCLC]: Librerías nativas descargadas y extraídas')
     }
 
     counter = 0
-    this.client.emit('debug', `[MCLC]: Set native path to ${nativeDirectory}`)
+    this.client.emit('debug', `[MCLC]: Ruta de nativos establecida en ${nativeDirectory}`)
 
     return nativeDirectory
   }
@@ -507,8 +552,10 @@ class Handler {
       counter++
       this.client.emit('progress', {
         type: eventName,
-        task: counter,
-        total: libraries.length
+        task: 'downloading',
+        current: counter,
+        total: libraries.length,
+        message: `Descargando librería: ${counter}/${libraries.length}`
       })
       libs.push(`${jarPath}${path.sep}${name}`)
     }))

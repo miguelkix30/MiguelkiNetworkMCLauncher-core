@@ -1,7 +1,7 @@
 {
-  "name": "minecraft-launcher-core",
-  "version": "3.18.2",
-  "description": "Lightweight module that downloads and runs Minecraft using javascript / NodeJS",
+  "name": "MiguelkiNetworkMCLauncher-core",
+  "version": "1.0.0",
+  "description": "Fork modificado de MinecraftLauncher-core para Miguelki Network",
   "main": "index.js",
   "dependencies": {
     "adm-zip": "^0.4.13",
@@ -24,19 +24,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Pierce01/MinecraftLauncher-core.git"
+    "url": "git+https://github.com/miguelkix30/MiguelkiNetworkMCLauncher-core.git"
   },
-  "keywords": [
-    "minecraft",
-    "minecraft-launcher-node",
-    "minecraft-launcher",
-    "launcher",
-    "minecraft-forge"
-  ],
-  "author": "Pierce Harriz",
+  "author": "Pierce Harriz, Miguelki",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/Pierce01/MinecraftLauncher-core/issues"
+    "url": "https://github.com/miguelkix30/MiguelkiNetworkMCLauncher-core/issues"
   },
-  "homepage": "https://github.com/Pierce01/MinecraftLauncher-core#readme"
+  "homepage": "https://github.com/miguelkix30/MiguelkiNetworkMCLauncher-core#readme"
 }

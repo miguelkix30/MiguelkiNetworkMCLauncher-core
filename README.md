@@ -6,6 +6,17 @@
 MCLC (Minecraft Launcher Core) is a NodeJS solution for launching modded and vanilla Minecraft without having to download and format everything yourself.
 Basically a core for your Electron or script based launchers.
 
+## New Features & Improvements
+
+This fork includes enhanced event emissions with better error handling and progress tracking:
+- **Improved Progress Events**: More detailed progress information with descriptive messages
+- **Enhanced Error Handling**: Better error reporting with detailed error types and stack traces
+- **Minecraft Process Monitoring**: New events for monitoring Minecraft process lifecycle
+- **Download Progress**: Detailed download status and error reporting
+- **Spanish Language Support**: Event messages in Spanish for better localization
+
+📖 **[Complete Events Documentation](./EMITS_DOCUMENTATION.md)** - Detailed guide of all available events
+
 ### Getting support
 I've created a Discord server for anyone who needs to get in contact with me or get help!
 <p>
@@ -42,8 +53,30 @@ let opts = {
 
 launcher.launch(opts);
 
-launcher.on('debug', (e) => console.log(e));
-launcher.on('data', (e) => console.log(e));
+// Enhanced event handling
+launcher.on('debug', (e) => console.log('[DEBUG]', e));
+launcher.on('data', (e) => console.log('[MINECRAFT]', e));
+
+// New progress events
+launcher.on('progress', (progress) => {
+    console.log(`[${progress.type.toUpperCase()}] ${progress.message}`);
+    console.log(`Progress: ${progress.current}/${progress.total}`);
+});
+
+// Enhanced error handling
+launcher.on('error', (error) => {
+    console.error(`[ERROR-${error.type}] ${error.message}`);
+    console.error('Details:', error.error);
+});
+
+// Minecraft process events
+launcher.on('minecraft-started', (info) => {
+    console.log(`Minecraft started with PID: ${info.pid}`);
+});
+
+launcher.on('minecraft-log', (log) => {
+    console.log(`[${log.type.toUpperCase()}] ${log.message}`);
+});
 ```
 ### Documentation
 

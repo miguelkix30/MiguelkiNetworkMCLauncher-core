@@ -7,6 +7,15 @@ const EventEmitter = require('events').EventEmitter
 class MCLCore extends EventEmitter {
   async launch (options) {
     try {
+      this.emit('debug', '[MCLC]: Iniciando proceso de lanzamiento de Minecraft')
+      this.emit('progress', {
+        type: 'launch',
+        task: 'initialization',
+        current: 0,
+        total: 10,
+        message: 'Inicializando launcher'
+      })
+
       this.options = { ...options }
       this.options.root = path.resolve(this.options.root)
       this.options.overrides = {
@@ -37,17 +46,55 @@ class MCLCore extends EventEmitter {
 
       this.printVersion()
 
+      this.emit('progress', {
+        type: 'launch',
+        task: 'java-check',
+        current: 1,
+        total: 10,
+        message: 'Verificando instalación de Java'
+      })
+
       const java = await this.handler.checkJava(this.options.javaPath || 'java')
       if (!java.run) {
-        this.emit('debug', `[MCLC]: Couldn't start Minecraft due to: ${java.message}`)
+        this.emit('debug', `[MCLC]: No se pudo iniciar Minecraft debido a: ${java.message}`)
+        this.emit('error', {
+          type: 'java-error',
+          error: java.message,
+          message: 'Java no está disponible o no se puede ejecutar'
+        })
         this.emit('close', 1)
         return null
       }
 
+      this.emit('debug', '[MCLC]: Java verificado correctamente')
+      this.emit('progress', {
+        type: 'launch',
+        task: 'directory-setup',
+        current: 2,
+        total: 10,
+        message: 'Configurando directorios'
+      })
+
       this.createRootDirectory()
       this.createGameDirectory()
 
+      this.emit('progress', {
+        type: 'launch',
+        task: 'package-extraction',
+        current: 3,
+        total: 10,
+        message: 'Extrayendo paquetes del cliente'
+      })
+
       await this.extractPackage()
+
+      this.emit('progress', {
+        type: 'launch',
+        task: 'version-setup',
+        current: 4,
+        total: 10,
+        message: 'Configurando archivos de versión'
+      })
 
       const directory = this.options.overrides.directory || path.join(this.options.root, 'versions', this.options.version.custom ? this.options.version.custom : this.options.version.number)
       this.options.directory = directory
@@ -60,11 +107,34 @@ class MCLCore extends EventEmitter {
       const nativePath = await this.handler.getNatives()
 
       if (!fs.existsSync(mcPath)) {
-        this.emit('debug', '[MCLC]: Attempting to download Minecraft version jar')
+        this.emit('debug', '[MCLC]: Intentando descargar el JAR de la versión de Minecraft')
+        this.emit('progress', {
+          type: 'launch',
+          task: 'jar-download',
+          current: 5,
+          total: 10,
+          message: 'Descargando JAR de Minecraft'
+        })
         await this.handler.getJar()
       }
 
+      this.emit('progress', {
+        type: 'launch',
+        task: 'mod-processing',
+        current: 6,
+        total: 10,
+        message: 'Procesando modificaciones (Forge/Custom)'
+      })
+
       const modifyJson = await this.getModifyJson()
+
+      this.emit('progress', {
+        type: 'launch',
+        task: 'jvm-setup',
+        current: 7,
+        total: 10,
+        message: 'Configurando argumentos de JVM'
+      })
 
       const args = []
 
@@ -117,19 +187,56 @@ class MCLCore extends EventEmitter {
       classPaths.push(`${this.options.forge ? this.options.forge + separator : ''}${classes.join(separator)}${jar}`)
       classPaths.push(file.mainClass)
 
-      this.emit('debug', '[MCLC]: Attempting to download assets')
+      this.emit('debug', '[MCLC]: Intentando descargar assets')
+      this.emit('progress', {
+        type: 'launch',
+        task: 'assets-download',
+        current: 8,
+        total: 10,
+        message: 'Descargando recursos del juego'
+      })
       await this.handler.getAssets()
 
       // Forge -> Custom -> Vanilla
+      this.emit('progress', {
+        type: 'launch',
+        task: 'launch-options',
+        current: 9,
+        total: 10,
+        message: 'Configurando opciones de lanzamiento'
+      })
       const launchOptions = await this.handler.getLaunchOptions(modifyJson)
+
+      this.emit('progress', {
+        type: 'launch',
+        task: 'final-preparation',
+        current: 10,
+        total: 10,
+        message: 'Preparando lanzamiento final'
+      })
 
       const launchArguments = args.concat(jvm, classPaths, launchOptions)
       this.emit('arguments', launchArguments)
-      this.emit('debug', `[MCLC]: Launching with arguments ${launchArguments.join(' ')}`)
+      this.emit('debug', `[MCLC]: Lanzando con argumentos: ${launchArguments.join(' ')}`)
+
+      this.emit('progress', {
+        type: 'launch',
+        task: 'starting-minecraft',
+        current: 10,
+        total: 10,
+        message: 'Iniciando Minecraft...'
+      })
 
       return this.startMinecraft(launchArguments)
     } catch (e) {
-      this.emit('debug', `[MCLC]: Failed to start due to ${e}, closing...`)
+      this.emit('debug', `[MCLC]: Error al iniciar: ${e.message || e}`)
+      this.emit('error', {
+        type: 'launch-error',
+        error: e.message || e,
+        stack: e.stack,
+        message: 'Error durante el proceso de lanzamiento'
+      })
+      this.emit('close', 1)
       return null
     }
   }
@@ -180,12 +287,63 @@ class MCLCore extends EventEmitter {
   }
 
   startMinecraft (launchArguments) {
-    const minecraft = child.spawn(this.options.javaPath ? this.options.javaPath : 'java', launchArguments,
-      { cwd: this.options.overrides.cwd || this.options.root, detached: this.options.overrides.detached })
-    minecraft.stdout.on('data', (data) => this.emit('data', data.toString('utf-8')))
-    minecraft.stderr.on('data', (data) => this.emit('data', data.toString('utf-8')))
-    minecraft.on('close', (code) => this.emit('close', code))
-    return minecraft
+    this.emit('debug', '[MCLC]: Iniciando proceso de Minecraft')
+    try {
+      const minecraft = child.spawn(this.options.javaPath ? this.options.javaPath : 'java', launchArguments,
+        { cwd: this.options.overrides.cwd || this.options.root, detached: this.options.overrides.detached })
+      
+      this.emit('minecraft-started', {
+        pid: minecraft.pid,
+        arguments: launchArguments,
+        cwd: this.options.overrides.cwd || this.options.root
+      })
+      
+      minecraft.stdout.on('data', (data) => {
+        const output = data.toString('utf-8')
+        this.emit('data', output)
+        this.emit('minecraft-log', {
+          type: 'stdout',
+          message: output.trim()
+        })
+      })
+      
+      minecraft.stderr.on('data', (data) => {
+        const output = data.toString('utf-8')
+        this.emit('data', output)
+        this.emit('minecraft-log', {
+          type: 'stderr',
+          message: output.trim()
+        })
+      })
+      
+      minecraft.on('close', (code) => {
+        this.emit('debug', `[MCLC]: Minecraft se ha cerrado con código: ${code}`)
+        this.emit('minecraft-closed', {
+          code: code,
+          signal: null
+        })
+        this.emit('close', code)
+      })
+      
+      minecraft.on('error', (error) => {
+        this.emit('debug', `[MCLC]: Error en el proceso de Minecraft: ${error.message}`)
+        this.emit('error', {
+          type: 'minecraft-process-error',
+          error: error.message,
+          message: 'Error en el proceso de Minecraft'
+        })
+      })
+      
+      return minecraft
+    } catch (e) {
+      this.emit('debug', `[MCLC]: Error al crear el proceso de Minecraft: ${e.message}`)
+      this.emit('error', {
+        type: 'spawn-error',
+        error: e.message,
+        message: 'Error al crear el proceso de Minecraft'
+      })
+      return null
+    }
   }
 }
 

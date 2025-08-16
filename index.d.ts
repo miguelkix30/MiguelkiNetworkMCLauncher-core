@@ -291,6 +291,67 @@ declare module "minecraft-launcher-core" {
     changeApiUrl(url: string): void;
   }
 
+  // Event interfaces for better type support
+  interface IProgressEvent {
+    type: string;
+    task: string;
+    current: number;
+    total: number;
+    message: string;
+  }
+
+  interface IDownloadStatusEvent {
+    name: string;
+    type: string;
+    current: number;
+    total: number;
+    percentage: number;
+  }
+
+  interface IDownloadStartEvent {
+    url: string;
+    file: string;
+    type: string;
+    totalBytes: number;
+  }
+
+  interface IDownloadCompleteEvent {
+    file: string;
+    type: string;
+    url: string;
+  }
+
+  interface IDownloadErrorEvent {
+    url: string;
+    file: string;
+    type: string;
+    error: string;
+    retry?: boolean;
+  }
+
+  interface IErrorEvent {
+    type: string;
+    error: string;
+    message: string;
+    stack?: string;
+  }
+
+  interface IMinecraftStartedEvent {
+    pid: number;
+    arguments: string[];
+    cwd: string;
+  }
+
+  interface IMinecraftLogEvent {
+    type: 'stdout' | 'stderr';
+    message: string;
+  }
+
+  interface IMinecraftClosedEvent {
+    code: number;
+    signal: string | null;
+  }
+
   import { EventEmitter } from 'events'
   import { ChildProcessWithoutNullStreams } from 'child_process'
 
@@ -301,7 +362,42 @@ declare module "minecraft-launcher-core" {
     protected createGameDirectory(): void;
     protected extractPackage(): Promise<void>;
     protected getModifyJson(): Promise<any>;
-    protected startMinecraft(launchArguments: string[]): ChildProcessWithoutNullStreams;
+    protected startMinecraft(launchArguments: string[]): ChildProcessWithoutNullStreams | null;
+
+    // Event overrides for better typing
+    on(event: 'debug', listener: (message: string) => void): this;
+    on(event: 'progress', listener: (progress: IProgressEvent) => void): this;
+    on(event: 'download-status', listener: (status: IDownloadStatusEvent) => void): this;
+    on(event: 'download-start', listener: (start: IDownloadStartEvent) => void): this;
+    on(event: 'download-complete', listener: (complete: IDownloadCompleteEvent) => void): this;
+    on(event: 'download-error', listener: (error: IDownloadErrorEvent) => void): this;
+    on(event: 'download', listener: (filename: string) => void): this;
+    on(event: 'error', listener: (error: IErrorEvent) => void): this;
+    on(event: 'minecraft-started', listener: (info: IMinecraftStartedEvent) => void): this;
+    on(event: 'minecraft-log', listener: (log: IMinecraftLogEvent) => void): this;
+    on(event: 'minecraft-closed', listener: (info: IMinecraftClosedEvent) => void): this;
+    on(event: 'data', listener: (data: string) => void): this;
+    on(event: 'arguments', listener: (args: string[]) => void): this;
+    on(event: 'close', listener: (code: number) => void): this;
+    on(event: 'package-extract', listener: (success: boolean) => void): this;
+    on(event: string, listener: (...args: any[]) => void): this;
+
+    emit(event: 'debug', message: string): boolean;
+    emit(event: 'progress', progress: IProgressEvent): boolean;
+    emit(event: 'download-status', status: IDownloadStatusEvent): boolean;
+    emit(event: 'download-start', start: IDownloadStartEvent): boolean;
+    emit(event: 'download-complete', complete: IDownloadCompleteEvent): boolean;
+    emit(event: 'download-error', error: IDownloadErrorEvent): boolean;
+    emit(event: 'download', filename: string): boolean;
+    emit(event: 'error', error: IErrorEvent): boolean;
+    emit(event: 'minecraft-started', info: IMinecraftStartedEvent): boolean;
+    emit(event: 'minecraft-log', log: IMinecraftLogEvent): boolean;
+    emit(event: 'minecraft-closed', info: IMinecraftClosedEvent): boolean;
+    emit(event: 'data', data: string): boolean;
+    emit(event: 'arguments', args: string[]): boolean;
+    emit(event: 'close', code: number): boolean;
+    emit(event: 'package-extract', success: boolean): boolean;
+    emit(event: string, ...args: any[]): boolean;
   }
 
   export const Authenticator: IAuthenticator;
